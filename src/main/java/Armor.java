@@ -33,7 +33,7 @@ public class Armor
         Character[] characterArr = ArrayUtils.toObject(armored.toCharArray());
         ArrayList<Character[]> chunks = chunkCharacterArray(characterArr, 43);
 
-        ArrayList<Byte> bytes = new ArrayList<Byte>();
+        ArrayList<Byte> bytes = new ArrayList<>();
 
         for (Character[] cA : chunks)
         {
@@ -73,14 +73,15 @@ public class Armor
                 decodedInt = decodedInt.add(BigInteger.valueOf(numFromLetter(chars[i])));
             }
         }
-
-        System.out.print("Max bytes block size: " + maxBytesBlockSize(chars.length) + ", ");
-        for (Character c : chars)
-        {
-            System.out.print(c);
-        }
-        System.out.println();
-        return toByteArrayUnsigned(decodedInt, maxBytesBlockSize(chars.length));
+        /*
+            System.out.print("Max bytes block size: " + maxBytesBlockSize(chars.length) + ", ");
+            for (Character c : chars)
+            {
+                System.out.print(c);
+            }
+            System.out.println();
+         */
+        return bigIntToByteArrayUnsigned(decodedInt, maxBytesBlockSize(chars.length));
     }
 
     public char letterFromNum(int i)
@@ -110,8 +111,8 @@ public class Armor
         return (int) Math.round(Math.floor(log(62, 2) / 8.0 * charsLength));
     }
 
-    //Also another thing Java doesn't provide by default.
-    public static byte[] toByteArrayUnsigned(BigInteger bi, int byteSize)
+    //Also another thing Java doesn't provide (that python does) by default.
+    public static byte[] bigIntToByteArrayUnsigned(BigInteger bi, int byteArraySize)
     {
         byte[] extractedBytes = bi.toByteArray();
         int skipped = 0;
@@ -131,16 +132,16 @@ public class Armor
         }
         extractedBytes = Arrays.copyOfRange(extractedBytes, skipped, extractedBytes.length);
 
-        if (extractedBytes.length > byteSize)
+        if (extractedBytes.length > byteArraySize)
         {
             System.out.println("Houston, we have a problem.");
-            System.out.println("Actual length: " + extractedBytes.length + " Wanted length: " + byteSize);
+            System.out.println("Actual length: " + extractedBytes.length + " Wanted length: " + byteArraySize);
             System.out.println("Value of first byte: " + extractedBytes[0]);
         }
 
-        if (extractedBytes.length < byteSize)
+        if (extractedBytes.length < byteArraySize)
         {
-            byte[] toAppend = new byte[byteSize - extractedBytes.length];
+            byte[] toAppend = new byte[byteArraySize - extractedBytes.length];
             extractedBytes = ArrayUtils.addAll(toAppend, extractedBytes);
         }
 
