@@ -42,6 +42,7 @@ public class Encrypt
     }
 
     //Mode 0 = encryption, mode 1 = decryption.
+    //This is slightly confusing, but it prevents a LOT of code reuse.
     public static byte[] generateMACKey(byte[] key1, byte[] key2, byte[] key3, byte[] headerHash, long recipientIndex, int majorVersion, int mode) throws SaltpackException, SodiumException
     {
         if (mode != 0 && mode != 1)
@@ -51,13 +52,32 @@ public class Encrypt
 
         if (majorVersion == 1)
         {
-            throw new SaltpackException("Invalid/unsupported major version ' " + majorVersion + "'.");
+            /*
+                key3 is not needed for this version.
+
+                if mode == 0
+                key1 = recip public
+                key2 = sender private
+
+                if mode == 1
+                key1 = sender public
+                key2 = recip private
+             */
+
+            byte[] headerHashFirstBytes = new byte[24];
+            System.arraycopy(headerHash, 0, headerHashFirstBytes, 0, 24); //Copy first 24 bytes of header hash.
+
+            byte[] macKeyBox = new byte[Box.MACBYTES + 32];
+            sodiumInstance.cryptoBoxEasy(macKeyBox, new byte[32], 32, headerHashFirstBytes, key1, key2);
+
+            byte[] macKey = new byte[32];
+            System.arraycopy(macKeyBox, macKeyBox.length - 32, macKey, 0, 32);
+
+            return macKey;
         }
-        else if (majorVersion == 2)
+        else if (majorVersion == 2) //TODO Needs to be tested.
         {
             /*
-                This is slightly confusing, but it prevents repeating a LOT of code.
-
                 if mode == 0
                 key1 = recip public
                 key2 = sender private
@@ -70,7 +90,7 @@ public class Encrypt
              */
 
             byte[] headerHashFirstBytes = new byte[16];
-            System.arraycopy(headerHash, 0, headerHashFirstBytes, 0, 16);
+            System.arraycopy(headerHash, 0, headerHashFirstBytes, 0, 16); //Copy the first 16 bytes of header hash to this array.
 
             byte[] indexBytes = Armor.bigIntToByteArrayUnsigned(BigInteger.valueOf(recipientIndex), 8);
 
@@ -78,21 +98,24 @@ public class Encrypt
             nonceBase[15] &= 0xfe; //Clear the least significant bit at index 15.
 
             byte[] macKeyBoxLongTermKey = new byte[Box.MACBYTES + 32];
-            sodiumInstance.cryptoBoxEasy(macKeyBoxLongTermKey, new byte[32], 32, nonceBase, key1, key2);
+            sodiumInstance.cryptoBoxEasy(macKeyBoxLongTermKey, new byte[32], 32, nonceBase, key1, key2); //Encrypt 32 zero bytes
 
             nonceBase[15] |= 0x01; //Set least significant bit of byte at index 15.
 
             byte[] macKeyBoxEphemeralKey = new byte[Box.MACBYTES + 32];
             sodiumInstance.cryptoBoxEasy(macKeyBoxEphemeralKey, new byte[32], 32, nonceBase,
                     (mode == 0 ) ? key1 : key3,
-                    (mode == 0) ? key3 : key2);
+                    (mode == 0) ? key3 : key2); //Encrypt 32 zero bytes again, with different keys
 
             byte[] concat = new byte[64];
-            System.arraycopy(macKeyBoxLongTermKey, macKeyBoxLongTermKey.length - 32, concat, 0, 32);
-            System.arraycopy(macKeyBoxEphemeralKey, macKeyBoxEphemeralKey.length - 32, concat, 32, 32);
+            System.arraycopy(macKeyBoxLongTermKey, macKeyBoxLongTermKey.length - 32, concat, 0, 32); //Copy first 32 to indicies 0-31
+            System.arraycopy(macKeyBoxEphemeralKey, macKeyBoxEphemeralKey.length - 32, concat, 32, 32); //Copy first 32 to indicies 32-63
 
-            byte[] macKey = new byte[64];
-            sodiumInstance.cryptoHashSha512(macKey, concat, 64);
+            byte[] macKeyHash = new byte[64];
+            sodiumInstance.cryptoHashSha512(macKeyHash, concat, 64); //Take SHA-512 hash of the above bytes
+
+            byte[] macKey = new byte[32];
+            System.arraycopy(macKeyHash, 0, macKey, 0, 32); //Copy first 32 bytes of hash to macKey
 
             return macKey;
         }
@@ -257,8 +280,10 @@ public class Encrypt
 
             byte[] senderKey = new byte[32];
             sodiumInstance.cryptoSecretBoxOpenEasy(senderKey, senderSbox, senderSbox.length, SENDER_KEY_SBOX_NONCE.getBytes(), payloadKey);
+
+            System.out.println("Mac key: " + sodiumInstance.toHexStr(generateMACKey(senderKey, privKey, null, headerHash, 0, 1, 1)));
         }
-        catch (MessageTypeException | MessageFormatException e)
+        catch (MessageTypeException | MessageFormatException | SodiumException e)
         {
             throw new SaltpackException("Error processing saltpack message. Message either malformed or not intended for saltpack.", e);
         }
