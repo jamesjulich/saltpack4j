@@ -10,6 +10,7 @@ import exception.SaltpackException;
 import org.apache.commons.lang3.ArrayUtils;
 import org.msgpack.core.*;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.Arrays;
@@ -23,6 +24,7 @@ public class Encrypt
     final static String SENDER_KEY_SBOX_NONCE = "saltpack_sender_key_sbox";
     final static String PAYLOAD_KEY_BOX_NONCE_V1 = "saltpack_payload_key_box";
     final static String PAYLOAD_KEY_BOX_NONCE_V2 = "saltpack_recipsb";
+    final static String PAYLOAD_NONCE_PREFIX = "saltpack_ploadsb";
 
     final static String myPubKey = "0121e188d25594c9315e78065ab9331bbc3590de83c5ae9d93e445754547b86905720a";
 
@@ -281,7 +283,40 @@ public class Encrypt
             byte[] senderKey = new byte[32];
             sodiumInstance.cryptoSecretBoxOpenEasy(senderKey, senderSbox, senderSbox.length, SENDER_KEY_SBOX_NONCE.getBytes(), payloadKey);
 
-            System.out.println("Mac key: " + sodiumInstance.toHexStr(generateMACKey(senderKey, privKey, null, headerHash, 0, 1, 1)));
+            //System.out.println("Mac key: " + sodiumInstance.toHexStr(generateMACKey(senderKey, privKey, null, headerHash, 0, 1, 1)));
+
+            byte[] macKey = generateMACKey(senderKey, privKey, null, headerHash, 0, majorVersion, 1);
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream(); //and now for the fun part, actually decrypting the stuff
+            int currentChunk = 0;
+
+            while (true)
+            {
+                boolean finalFlag = false;
+                byte finalFlagByte = 0x00; //0
+
+                messageUnpacker.unpackArrayHeader(); //Unpack the array header for the payload packet.
+
+                if (majorVersion == 2)
+                {
+                    finalFlag = messageUnpacker.unpackBoolean();
+                }
+
+                int numAuthenticators = messageUnpacker.unpackArrayHeader();
+
+                byte[] ourAuthenticator = new byte[0];
+                for (int i = 0; i <= currentRecipNumber; i++)
+                {
+                    ourAuthenticator = new byte[messageUnpacker.unpackBinaryHeader()];
+                    messageUnpacker.readPayload(ourAuthenticator);
+                }
+
+                System.out.println("Our authenticator: " + sodiumInstance.toHexStr(ourAuthenticator));
+
+                System.out.println(currentRecipNumber);
+                System.out.println(messageUnpacker.getNextFormat().getValueType().toString());
+                break;
+            }
         }
         catch (MessageTypeException | MessageFormatException | SodiumException e)
         {
