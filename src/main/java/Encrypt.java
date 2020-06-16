@@ -2,6 +2,7 @@ import com.goterl.lazycode.lazysodium.LazySodium;
 import com.goterl.lazycode.lazysodium.LazySodiumJava;
 import com.goterl.lazycode.lazysodium.SodiumJava;
 import com.goterl.lazycode.lazysodium.exceptions.SodiumException;
+import com.goterl.lazycode.lazysodium.interfaces.Auth;
 import com.goterl.lazycode.lazysodium.interfaces.Box;
 import com.goterl.lazycode.lazysodium.interfaces.SecretBox;
 import com.goterl.lazycode.lazysodium.utils.Key;
@@ -12,7 +13,9 @@ import org.msgpack.core.*;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 public class Encrypt
@@ -41,6 +44,13 @@ public class Encrypt
             return PAYLOAD_KEY_BOX_NONCE_V1.getBytes();
         else
             return ArrayUtils.addAll(PAYLOAD_KEY_BOX_NONCE_V2.getBytes(), Armor.bigIntToByteArrayUnsigned(BigInteger.valueOf(recipIndex), 8));
+    }
+
+    public static ArrayList<Byte[]> chunksWithEmpty(Byte[] chunkyBoi, int chunkSize)
+    {
+        ArrayList<Byte[]> chunked = Armor.chunkByteArray(chunkyBoi, chunkSize);
+        chunked.add(new Byte[]{});
+        return chunked;
     }
 
     //Mode 0 = encryption, mode 1 = decryption.
@@ -178,7 +188,12 @@ public class Encrypt
         byte[] newArray = Arrays.copyOfRange(hashBytes, 0, 16);
     }
 
-    public static void decrypt() throws IOException, SaltpackException
+    public static void encrypt(byte[] message, byte[] privKey, ByteArrayOutputStream out)
+    {
+
+    }
+
+    public static void decrypt(byte[] cipherText, byte[] privKey, ByteArrayOutputStream out) throws IOException, SaltpackException
     {
         try
         {
@@ -190,17 +205,13 @@ public class Encrypt
             //Recip pub: 499F056E9F9A11CF18B7CA8326CEC70BB89FBEDEA399535B7B57299B2345FD4F
             //Recip priv: 50991DBD243BF51CD46AFFA124A53FB46F4216241E246848E051D458E3AC26A1
 
-            byte[] privKey = Key.fromHexString("50991DBD243BF51CD46AFFA124A53FB46F4216241E246848E051D458E3AC26A1").getAsBytes();
-
-            byte[] bytes = a.dearmor("BEGIN SALTPACK ENCRYPTED MESSAGE. kcJn5brvybfNjz6 D5litY0cgiExVuZ xnTvXbHueR5w5Ri 6G0Pm7Z4TgNVvDG fZJpMFbqqcutcid v87UC8zdZ1vS0Lp kRYbz0QhoodTzMy 0BZJx27bzOPFZv6 QI51rrRsNbnhSBQ UmkSc1v0V4TUYDf PPPLFjgblox5MjP Sqb3oayvcYhKVYd 2CqgpxQUbJbEmW6 zBTK6cPAHVhIZIK mENgutiU4HsUJx8 s5QW3EFQyGwXoW8 qgTRqsEDAjLdeCj MsXI3G58qKNmrt8 RvJEqjGFvYe6yEC BA8AEpSt18kdjWy ChZGzYFQz5oRZZv 1PmmdaZv1GgBZtH Tl6jJ7veLkU3vD3 iMchAgXHB4UuF. END SALTPACK ENCRYPTED MESSAGE.");
-            MessageUnpacker messageUnpacker = MessagePack.newDefaultUnpacker(bytes); //missed opportunity for an unpack saltpack joke?
+            MessageUnpacker messageUnpacker = MessagePack.newDefaultUnpacker(cipherText); //missed opportunity for an unpack saltpack joke?
 
             byte[] encodedHeader = new byte[messageUnpacker.unpackBinaryHeader()];
             messageUnpacker.readPayload(encodedHeader);
 
             byte[] headerHash = new byte[64]; //SHA-512 hash = 512 bits = 64 bytes.
             sodiumInstance.cryptoHashSha512(headerHash, encodedHeader, encodedHeader.length);
-            System.out.println("Header hash: " + sodiumInstance.toHexStr(headerHash));
 
             MessageUnpacker headerUnpacker = MessagePack.newDefaultUnpacker(encodedHeader);
 
@@ -244,7 +255,6 @@ public class Encrypt
             headerUnpacker.readPayload(senderSbox);
 
             int recipientsNum = headerUnpacker.unpackArrayHeader();
-            System.out.println("Reciplist length: " + recipientsNum);
 
             int currentRecipNumber = 0;
             byte[] payloadKey = null;
@@ -267,7 +277,6 @@ public class Encrypt
 
                 if (!sodiumInstance.cryptoBoxOpenEasyAfterNm(payloadKey, payloadKeyBox, payloadKeyBox.length, getPayloadKeyBoxNonce(majorVersion, currentRecipNumber), sharedSecret))
                 {
-                    System.out.println("that aint it chief, recip #" + currentRecipNumber);
                     currentRecipNumber++;
                     continue;
                 }
@@ -283,39 +292,73 @@ public class Encrypt
             byte[] senderKey = new byte[32];
             sodiumInstance.cryptoSecretBoxOpenEasy(senderKey, senderSbox, senderSbox.length, SENDER_KEY_SBOX_NONCE.getBytes(), payloadKey);
 
-            //System.out.println("Mac key: " + sodiumInstance.toHexStr(generateMACKey(senderKey, privKey, null, headerHash, 0, 1, 1)));
-
             byte[] macKey = generateMACKey(senderKey, privKey, null, headerHash, 0, majorVersion, 1);
 
-            ByteArrayOutputStream out = new ByteArrayOutputStream(); //and now for the fun part, actually decrypting the stuff
-            int currentChunk = 0;
+            BigInteger currentChunk = BigInteger.valueOf(0);
 
+            //And now for the fun part, actually decrypting things :P
             while (true)
             {
                 boolean finalFlag = false;
-                byte finalFlagByte = 0x00; //0
+                byte finalFlagByte = (byte) 0x00; //0
 
                 messageUnpacker.unpackArrayHeader(); //Unpack the array header for the payload packet.
 
                 if (majorVersion == 2)
                 {
                     finalFlag = messageUnpacker.unpackBoolean();
+                    finalFlagByte = (finalFlag) ? (byte) 0x01 : (byte) 0x00;
                 }
 
                 int numAuthenticators = messageUnpacker.unpackArrayHeader();
 
-                byte[] ourAuthenticator = new byte[0];
-                for (int i = 0; i <= currentRecipNumber; i++)
+                byte[][] authenticators = new byte[numAuthenticators][32];
+                byte[] ourAuthenticator = authenticators[currentRecipNumber];
+                byte[] payloadNonce = ArrayUtils.addAll(PAYLOAD_NONCE_PREFIX.getBytes(), Armor.bigIntToByteArrayUnsigned(currentChunk, 8));
+
+                for (int i = 0; i < recipientsNum; i++)
                 {
-                    ourAuthenticator = new byte[messageUnpacker.unpackBinaryHeader()];
-                    messageUnpacker.readPayload(ourAuthenticator);
+                    messageUnpacker.unpackBinaryHeader();
+                    messageUnpacker.readPayload(authenticators[i]); //TODO Optimize to skip all remaining authenticators before/after ours is read.
                 }
 
-                System.out.println("Our authenticator: " + sodiumInstance.toHexStr(ourAuthenticator));
+                byte[] encryptedPayload = new byte[messageUnpacker.unpackBinaryHeader()];
+                messageUnpacker.readPayload(encryptedPayload);
 
-                System.out.println(currentRecipNumber);
-                System.out.println(messageUnpacker.getNextFormat().getValueType().toString());
-                break;
+                byte[] concat;
+
+                if (majorVersion == 1)
+                {
+                    concat = ArrayUtils.addAll(ArrayUtils.addAll(headerHash, payloadNonce), encryptedPayload);
+                }
+                else
+                {
+                    concat = ArrayUtils.addAll(ArrayUtils.addAll(ArrayUtils.addAll(headerHash, payloadNonce), finalFlagByte), encryptedPayload);
+                }
+
+                byte[] payloadHash = new byte[64]; //512 bit hash, 64 bytes
+                sodiumInstance.cryptoHashSha512(payloadHash, concat, concat.length);
+
+                byte[] hmac = new byte[64];
+                sodiumInstance.cryptoAuthHMACSha512(hmac, payloadHash, payloadHash.length, macKey);
+                byte[] hmac32 = new byte[32];
+                System.arraycopy(hmac, 0, hmac32, 0, 32);
+
+                if (!Arrays.equals(ourAuthenticator, hmac32))
+                {
+                    throw new SaltpackException("Invalid HMAC authenticator. Could not verify authenticity of payload #" + currentChunk.toString());
+                }
+
+                byte[] decryptedPayload = new byte[encryptedPayload.length - SecretBox.MACBYTES];
+                sodiumInstance.cryptoSecretBoxOpenEasy(decryptedPayload, encryptedPayload, encryptedPayload.length, payloadNonce, payloadKey);
+
+                out.writeBytes(decryptedPayload);
+
+                if (decryptedPayload.length == 0 || finalFlag)
+                {
+                    break;
+                }
+                currentChunk = currentChunk.add(BigInteger.ONE);
             }
         }
         catch (MessageTypeException | MessageFormatException | SodiumException e)
@@ -332,25 +375,21 @@ public class Encrypt
 
             Armor a = new Armor();
 
-            decrypt();
+            byte[] privKey = Key.fromHexString("50991DBD243BF51CD46AFFA124A53FB46F4216241E246848E051D458E3AC26A1").getAsBytes();
+            byte[] bytes = a.dearmor("BEGIN SALTPACK ENCRYPTED MESSAGE. kcJn5brvybfNjz6 D5litY0cgiExVuZ xnTvXbHueR5w5Ri 6G0Pm7Z4TgNVvDG fZJpMFbqqcutcid v87UC8zdZ1vS0Lp kRYbz0QhoodTzMy 0BZJx27bzOPFZv6 QI51rrRsNbnhSBQ UmkSc1v0V4TUYDf PPPLFjgblox5MjP Sqb3oayvcYhKVYd 2CqgpxQUbJbEmW6 zBTK6cPAHVhIZIK mENgutiU4HsUJx8 s5QW3EFQyGwXoW8 qgTRqsEDAjLdeCj MsXI3G58qKNmrt8 RvJEqjGFvYe6yEC BA8AEpSt18kdjWy ChZGzYFQz5oRZZv 1PmmdaZv1GgBZtH Tl6jJ7veLkU3vD3 iMchAgXHB4UuF. END SALTPACK ENCRYPTED MESSAGE.");
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
 
+            decrypt(bytes, privKey, out);
+
+            System.out.println(new String(out.toByteArray()));
 
             /*
-            SecureRandom sr = new SecureRandom();
-            byte[] privBytes = new byte[32];
-            sr.nextBytes(privBytes);
+                SecureRandom sr = new SecureRandom();
+                byte[] privBytes = new byte[32];
+                sr.nextBytes(privBytes);
 
-            byte[] pubKey = sodiumInstance.cryptoScalarMultBase(Key.fromBytes(privBytes)).getAsBytes();
-
-            System.out.println("length: " + privBytes.length + " " + pubKey.length);
-
-            System.out.println(sodiumInstance.toHexStr(privBytes));
-            System.out.println(sodiumInstance.toHexStr(pubKey));
-
-
-
-            System.out.println("length: " + Key.fromHexString("499F056E9F9A11CF18B7CA8326CEC70BB89FBEDEA399535B7B57299B2345FD4F").getAsBytes().length + " " + Key.fromHexString("50991DBD243BF51CD46AFFA124A53FB46F4216241E246848E051D458E3AC26A1").getAsBytes().length);
-             */
+                byte[] pubKey = sodiumInstance.cryptoScalarMultBase(Key.fromBytes(privBytes)).getAsBytes();
+            */
         }
         catch (Exception e)
         {

@@ -148,6 +148,8 @@ public class Armor
         return extractedBytes;
     }
 
+    //TODO Merge these functions into a single function using generics.
+
     //Chunks a large array into a list of smaller arrays, the last array can be smaller than specified size.
     public ArrayList<Character[]> chunkCharacterArray(Character[] chunkyBoi, int size)
     {
@@ -172,7 +174,7 @@ public class Armor
         return chunks;
     }
 
-    public ArrayList<Byte[]> chunkByteArray(Byte[] chunkyBoi, int size)
+    public static ArrayList<Byte[]> chunkByteArray(Byte[] chunkyBoi, int size)
     {
         ArrayList<Byte[]> chunks = new ArrayList<Byte[]>();
         ArrayList<Byte> currentChunk = new ArrayList<Byte>();
