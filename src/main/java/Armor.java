@@ -174,6 +174,7 @@ public class Armor
         return chunks;
     }
 
+    //FIXME This will be used to create chunks in Encrypt.java. It needs to take in a chunk size using the BigInteger class.
     public static ArrayList<Byte[]> chunkByteArray(Byte[] chunkyBoi, int size)
     {
         ArrayList<Byte[]> chunks = new ArrayList<Byte[]>();

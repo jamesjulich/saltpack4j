@@ -15,13 +15,14 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.math.BigInteger;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
 
 public class Encrypt
 {
     final static int MAJOR_VERSION = 2;
-    final static int MINOR_VERSION = 1;
+    final static int MINOR_VERSION = 0;
     final static int MODE = 0;
 
     final static String SENDER_KEY_SBOX_NONCE = "saltpack_sender_key_sbox";
@@ -137,60 +138,75 @@ public class Encrypt
         }
     }
 
-    public static void encrypt() throws IOException, SodiumException
+    public static void encrypt(byte[] message, byte[][] recipientList, byte[] privKey, int majorVersion, boolean senderVisible, boolean recipientsVisible, ByteArrayOutputStream out) throws IOException, SodiumException, SaltpackException
     {
-        byte[] payloadKey = sodiumInstance.randomBytesBuf(32); //1. Generate a random 32 byte (256 bit) symmetric encryption key.
-        KeyPair ephemeralKey = sodiumInstance.cryptoBoxKeypair(); //2. Generate a random keypair to be used for this message only.
+        MessageBufferPacker headerPacker = MessagePack.newDefaultBufferPacker();
+        SecureRandom sr = new SecureRandom();
 
-        String senderSbox = sodiumInstance.cryptoSecretBoxEasy(ephemeralKey.getPublicKey().getAsHexString(), SENDER_KEY_SBOX_NONCE.getBytes(), Key.fromBytes(payloadKey));
-        //String recipEncryptedPayloadKey = sodiumInstance.cryptoBoxEasy(Key.fromBytes(payloadKey).getAsHexString(), (PAYLOAD_KEY_BOX_NONCE + "0").getBytes(), new KeyPair(Key.fromHexString(myPubKey), ephemeralKey.getSecretKey()));
+        byte[] senderPublic = sodiumInstance.cryptoScalarMultBase(Key.fromBytes(privKey)).getAsBytes();
+        byte[] ephemeralPrivate = new byte[32];
+        sr.nextBytes(ephemeralPrivate);
+        byte[] ephemeralPublic = sodiumInstance.cryptoScalarMultBase(Key.fromBytes(ephemeralPrivate)).getAsBytes();
+        byte[] payloadKey = new byte[32];
+        sr.nextBytes(payloadKey);
 
-        //Create MessagePack header packet
-        MessageBufferPacker packer = MessagePack.newDefaultBufferPacker();
-        packer.packArrayHeader(6); //The header array contains 6 objects.
+        byte[] senderSbox = new byte[SecretBox.MACBYTES + senderPublic.length];
+        sodiumInstance.cryptoSecretBoxEasy(senderSbox, senderPublic, senderPublic.length, SENDER_KEY_SBOX_NONCE.getBytes(), payloadKey);
 
-        //Format
-        packer.packString("saltpack");
+        //This is the first part of the header. The next block of code writes recipients to the header.
+        headerPacker.packString("saltpack");
+        headerPacker.packArrayHeader(2); //Create an array with 2 elements.
+        headerPacker.packInt(majorVersion);
+        headerPacker.packInt((majorVersion != 1) ? MINOR_VERSION : 0); //This concludes the array.
+        headerPacker.packInt(MODE);
+        headerPacker.writePayload(ephemeralPublic);
+        headerPacker.writePayload(senderSbox);
 
-        //Version
-        packer.packArrayHeader(2); //The version object is a list of two integers, ex. [2, 0].
-        packer.packInt(MAJOR_VERSION);
-        packer.packInt(MINOR_VERSION);
+        for (int i = 0; i < recipientList.length; i++)
+        {
+            byte[] recipient = recipientList[i];
+            byte[] payloadKeyBox = new byte[payloadKey.length + Box.MACBYTES];
+            sodiumInstance.cryptoBoxEasy(payloadKeyBox, payloadKey, payloadKey.length, getPayloadKeyBoxNonce(majorVersion, i), recipient, privKey);
 
-        //Mode
-        packer.packInt(MODE);
+            headerPacker.packArrayHeader(2);
+            if (recipientsVisible)
+            {
+                headerPacker.writePayload(recipient);
+            }
+            else
+            {
+                headerPacker.packNil();
+            }
+            headerPacker.writePayload(payloadKeyBox);
+        }
 
-        //Ephemeral public key
-        packer.packString(ephemeralKey.getPublicKey().getAsHexString());
+        //Now that header is finished being written, write to byte array for encoding again.
+        byte[] headerBytes = headerPacker.toByteArray();
+        byte[] headerHash = new byte[64];
+        sodiumInstance.cryptoHashSha512(headerHash, headerBytes, headerBytes.length); //SHA512 header into headerHash
 
-        //Sender secretbox
-        packer.packString(senderSbox);
+        //Double-encode the header bytes to make decryption easier
+        MessageBufferPacker messagePacker = MessagePack.newDefaultBufferPacker();
+        messagePacker.writePayload(headerBytes);
 
-        //Recipients list
-        int recipsNum = 1;
-        packer.packArrayHeader(recipsNum);
-        packer.packString(myPubKey);
-        //packer.packString(recipEncryptedPayloadKey);
+        out.writeBytes(messagePacker.toByteArray());
+        messagePacker.clear();
 
-        byte[] packedByteArr = packer.toByteArray();
+        byte[][] recipientMacKeys = new byte[recipientList.length][32];
+        for (int i = 0; i < recipientList.length; i++)
+        {
+            byte[] recipient = recipientList[i];
+            if (majorVersion == 1)
+            {
+                recipientMacKeys[i] = generateMACKey(recipient, privKey, null, headerHash, i, majorVersion, 0);
+            }
+            else if (majorVersion == 2)
+            {
+                recipientMacKeys[i] = generateMACKey(recipient, privKey, ephemeralPrivate, headerHash, i, majorVersion, 0);
+            }
+        }
 
-        //Hash the header
-        byte[] hashBytes = new byte[64];
-        sodiumInstance.cryptoHashSha512(hashBytes, packedByteArr, packedByteArr.length);
-        String hashString = sodiumInstance.toHexStr(hashBytes);
-
-        //Encode the header packet a second time, this time into a bin object.
-        MessageBufferPacker bytePacker = MessagePack.newDefaultBufferPacker();
-        bytePacker.packBinaryHeader(packedByteArr.length);
-        bytePacker.addPayload(packedByteArr);
-
-        //Find a MAC key for my public key.
-        byte[] newArray = Arrays.copyOfRange(hashBytes, 0, 16);
-    }
-
-    public static void encrypt(byte[] message, byte[] privKey, ByteArrayOutputStream out)
-    {
-
+        //TODO Chunk byte array and write to byte stream
     }
 
     public static void decrypt(byte[] cipherText, byte[] privKey, ByteArrayOutputStream out) throws IOException, SaltpackException
