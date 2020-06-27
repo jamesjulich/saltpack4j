@@ -40,7 +40,7 @@ public class Encrypt
         Encrypt.sodiumInstance = sodiumInstance;
     }
 
-    public static byte[] getPayloadKeyBoxNonce(int majorVersion, long recipIndex)
+    public static byte[] getPayloadKeyBoxNonce(int majorVersion, long recipIndex) throws SaltpackException
     {
         if (majorVersion == 1)
             return PAYLOAD_KEY_BOX_NONCE_V1.getBytes();
@@ -438,6 +438,7 @@ public class Encrypt
             Armor a = new Armor();
 
             byte[] pubKey = Key.fromHexString("499F056E9F9A11CF18B7CA8326CEC70BB89FBEDEA399535B7B57299B2345FD4F").getAsBytes();
+            byte[] senderPrivKey = Key.fromHexString("089BB77511D40AF4C307DCE4179EB041E6EA645B698C6D7C72D18D73885E1B2B").getAsBytes();
             byte[] privKey = Key.fromHexString("50991DBD243BF51CD46AFFA124A53FB46F4216241E246848E051D458E3AC26A1").getAsBytes();
             byte[] bytes = a.dearmor("BEGIN SALTPACK ENCRYPTED MESSAGE. kcJn5brvybfNjz6 D5litY0cgiExVuZ xnTvXbHueR5w5Ri 6G0Pm7Z4TgNVvDG fZJpMFbqqcutcid v87UC8zdZ1vS0Lp kRYbz0QhoodTzMy 0BZJx27bzOPFZv6 QI51rrRsNbnhSBQ UmkSc1v0V4TUYDf PPPLFjgblox5MjP Sqb3oayvcYhKVYd 2CqgpxQUbJbEmW6 zBTK6cPAHVhIZIK mENgutiU4HsUJx8 s5QW3EFQyGwXoW8 qgTRqsEDAjLdeCj MsXI3G58qKNmrt8 RvJEqjGFvYe6yEC BA8AEpSt18kdjWy ChZGzYFQz5oRZZv 1PmmdaZv1GgBZtH Tl6jJ7veLkU3vD3 iMchAgXHB4UuF. END SALTPACK ENCRYPTED MESSAGE.");
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -446,11 +447,13 @@ public class Encrypt
 
             ByteArrayOutputStream encryptOut = new ByteArrayOutputStream();
 
-            encrypt("Hello world".getBytes(), new byte[][]{pubKey}, privKey, 2, true, true, encryptOut);
+            encrypt("Hello world".getBytes(), new byte[][]{pubKey}, senderPrivKey, 1, true, true, encryptOut);
             decrypt(encryptOut.toByteArray(), privKey, out);
 
-
             System.out.println(new String(out.toByteArray()));
+
+            String armored = a.armor(encryptOut.toByteArray(), "ENCRYPTED MESSAGE"); //Fails because sodiumInstance null
+            System.out.println(armored);
 
             /*
                 SecureRandom sr = new SecureRandom();

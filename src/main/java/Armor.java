@@ -1,5 +1,10 @@
+import com.goterl.lazycode.lazysodium.exceptions.SodiumException;
+import com.goterl.lazycode.lazysodium.utils.Key;
+import exception.SaltpackException;
 import org.apache.commons.lang3.ArrayUtils;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -11,12 +16,36 @@ public class Armor
 
     final BigInteger SIXTY_TWO = BigInteger.valueOf(62);
 
-    public String armor(byte[] bytes)
+    public String armor(byte[] bytes, String messageType)
     {
-        return "placceholder";
+        ArrayList<Byte[]> chunks = chunkByteArray(ArrayUtils.toObject(bytes), 32);
+        String output = "";
+
+        for (Byte[] chunk : chunks)
+        {
+            output += encodeBlock(chunk);
+        }
+
+        String result = "";
+        for (int i = 0; i < output.length(); i++)
+        {
+            if (i % 15 == 0 && i != 0)
+            {
+                result += " ";
+            }
+
+            if (i % 200 == 0 && i != 0)
+            {
+                result += "\n";
+            }
+            result += output.charAt(i);
+        }
+        String header = "BEGIN SALTPACK " + messageType + ". ";
+        String footer = ". END SALTPACK " + messageType + ".";
+        return header + result + footer;
     }
 
-    public byte[] dearmor(String armoredString)
+    public byte[] dearmor(String armoredString) throws SaltpackException
     {
         String[] parts = armoredString.split("\\.");
 
@@ -42,7 +71,6 @@ public class Armor
                 bytes.add(b);
             }
         }
-
         return ArrayUtils.toPrimitive(bytes.toArray(new Byte[bytes.size()]));
     }
 
@@ -57,11 +85,11 @@ public class Armor
             encodedString += letterFromNum(bytesInt.mod(SIXTY_TWO).intValue());
             bytesInt = bytesInt.divide(SIXTY_TWO);
         }
-
         return new StringBuilder(encodedString).reverse().toString();
     }
 
-    public byte[] decodeBlock(Character[] chars)
+    //TODO look into making this a method that uses primitive chars.
+    public byte[] decodeBlock(Character[] chars) throws SaltpackException
     {
         BigInteger decodedInt = BigInteger.valueOf(numFromLetter(chars[0]));
 
@@ -73,14 +101,6 @@ public class Armor
                 decodedInt = decodedInt.add(BigInteger.valueOf(numFromLetter(chars[i])));
             }
         }
-        /*
-            System.out.print("Max bytes block size: " + maxBytesBlockSize(chars.length) + ", ");
-            for (Character c : chars)
-            {
-                System.out.print(c);
-            }
-            System.out.println();
-         */
         return bigIntToByteArrayUnsigned(decodedInt, maxBytesBlockSize(chars.length));
     }
 
@@ -112,7 +132,7 @@ public class Armor
     }
 
     //Also another thing Java doesn't provide (that python does) by default.
-    public static byte[] bigIntToByteArrayUnsigned(BigInteger bi, int byteArraySize)
+    public static byte[] bigIntToByteArrayUnsigned(BigInteger bi, int byteArraySize) throws SaltpackException
     {
         byte[] extractedBytes = bi.toByteArray();
         int skipped = 0;
@@ -137,6 +157,7 @@ public class Armor
             System.out.println("Houston, we have a problem.");
             System.out.println("Actual length: " + extractedBytes.length + " Wanted length: " + byteArraySize);
             System.out.println("Value of first byte: " + extractedBytes[0]);
+            throw new SaltpackException("Could not convert BigInteger to byte[]: specified byte[] length too small. Got target length: " + byteArraySize + ", needed: " + extractedBytes.length);
         }
 
         if (extractedBytes.length < byteArraySize)
@@ -144,7 +165,6 @@ public class Armor
             byte[] toAppend = new byte[byteArraySize - extractedBytes.length];
             extractedBytes = ArrayUtils.addAll(toAppend, extractedBytes);
         }
-
         return extractedBytes;
     }
 
@@ -223,7 +243,21 @@ public class Armor
             System.out.println("HERE");
             return false;
         }
-
         return true;
+    }
+
+    public static void main(String[] args) throws SaltpackException, IOException, SodiumException
+    {
+        //Test area for when we implement armoring.
+        Armor a = new Armor();
+
+        //TODO Create an actually working API
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        Encrypt.encrypt("Hello world!".getBytes(),
+                new byte[][]{Key.fromBase64String("499F056E9F9A11CF18B7CA8326CEC70BB89FBEDEA399535B7B57299B2345FD4F").getAsBytes()},
+                Key.fromBase64String("089BB77511D40AF4C307DCE4179EB041E6EA645B698C6D7C72D18D73885E1B2B").getAsBytes(),
+                2, true, true, out);
+        String armored = a.armor(out.toByteArray(), "ENCRYPTED MESSAGE"); //Fails because sodiumInstance null
+        System.out.println(armored);
     }
 }
