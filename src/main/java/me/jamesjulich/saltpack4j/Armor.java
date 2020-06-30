@@ -1,6 +1,10 @@
+package me.jamesjulich.saltpack4j;
+
+import com.goterl.lazycode.lazysodium.LazySodiumJava;
+import com.goterl.lazycode.lazysodium.SodiumJava;
 import com.goterl.lazycode.lazysodium.exceptions.SodiumException;
 import com.goterl.lazycode.lazysodium.utils.Key;
-import exception.SaltpackException;
+import me.jamesjulich.saltpack4j.exception.SaltpackException;
 import org.apache.commons.lang3.ArrayUtils;
 
 import java.io.ByteArrayOutputStream;
@@ -15,6 +19,8 @@ public class Armor
     final char[] alphabetChars = alphabet.toCharArray();
 
     final BigInteger SIXTY_TWO = BigInteger.valueOf(62);
+
+    Armor(){}
 
     public String armor(byte[] bytes, String messageType)
     {
@@ -34,7 +40,7 @@ public class Armor
                 result += " ";
             }
 
-            if (i % 200 == 0 && i != 0)
+            if (i % 3000 == 0 && i != 0)
             {
                 result += "\n";
             }
@@ -51,8 +57,7 @@ public class Armor
 
         if (!framingIsValid(parts))
         {
-            System.out.println("Framing invalid, can't process this armored string.");
-            //TODO throw an exception of some sort
+            throw new SaltpackException("Framing is invalid, cannot process armored string.");
         }
 
         String armored = parts[1];
@@ -244,20 +249,5 @@ public class Armor
             return false;
         }
         return true;
-    }
-
-    public static void main(String[] args) throws SaltpackException, IOException, SodiumException
-    {
-        //Test area for when we implement armoring.
-        Armor a = new Armor();
-
-        //TODO Create an actually working API
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        Encrypt.encrypt("Hello world!".getBytes(),
-                new byte[][]{Key.fromBase64String("499F056E9F9A11CF18B7CA8326CEC70BB89FBEDEA399535B7B57299B2345FD4F").getAsBytes()},
-                Key.fromBase64String("089BB77511D40AF4C307DCE4179EB041E6EA645B698C6D7C72D18D73885E1B2B").getAsBytes(),
-                2, true, true, out);
-        String armored = a.armor(out.toByteArray(), "ENCRYPTED MESSAGE"); //Fails because sodiumInstance null
-        System.out.println(armored);
     }
 }

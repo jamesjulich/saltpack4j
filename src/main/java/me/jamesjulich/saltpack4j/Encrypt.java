@@ -1,19 +1,18 @@
+package me.jamesjulich.saltpack4j;
+
 import com.goterl.lazycode.lazysodium.LazySodium;
 import com.goterl.lazycode.lazysodium.LazySodiumJava;
 import com.goterl.lazycode.lazysodium.SodiumJava;
 import com.goterl.lazycode.lazysodium.exceptions.SodiumException;
-import com.goterl.lazycode.lazysodium.interfaces.Auth;
 import com.goterl.lazycode.lazysodium.interfaces.Box;
 import com.goterl.lazycode.lazysodium.interfaces.SecretBox;
 import com.goterl.lazycode.lazysodium.utils.Key;
-import com.goterl.lazycode.lazysodium.utils.KeyPair;
-import exception.SaltpackException;
+import me.jamesjulich.saltpack4j.exception.SaltpackException;
 import org.apache.commons.lang3.ArrayUtils;
 import org.msgpack.core.*;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -32,15 +31,14 @@ public class Encrypt
 
     final static String myPubKey = "0121e188d25594c9315e78065ab9331bbc3590de83c5ae9d93e445754547b86905720a";
 
-    private static LazySodium sodiumInstance;
+    private LazySodium sodiumInstance;
 
-    //TODO Make less things static. This is lazy programming to get a working library, but before release, we must have an actual API.
-    public Encrypt(LazySodium sodiumInstance)
+    Encrypt(LazySodium sodiumInstance)
     {
-        Encrypt.sodiumInstance = sodiumInstance;
+        this.sodiumInstance = sodiumInstance;
     }
 
-    public static byte[] getPayloadKeyBoxNonce(int majorVersion, long recipIndex) throws SaltpackException
+    public byte[] getPayloadKeyBoxNonce(int majorVersion, long recipIndex) throws SaltpackException
     {
         if (majorVersion == 1)
             return PAYLOAD_KEY_BOX_NONCE_V1.getBytes();
@@ -48,14 +46,14 @@ public class Encrypt
             return ArrayUtils.addAll(PAYLOAD_KEY_BOX_NONCE_V2.getBytes(), Armor.bigIntToByteArrayUnsigned(BigInteger.valueOf(recipIndex), 8));
     }
 
-    public static ArrayList<Byte[]> chunksWithEmpty(Byte[] chunkyBoi, int chunkSize)
+    public ArrayList<Byte[]> chunksWithEmpty(Byte[] chunkyBoi, int chunkSize)
     {
         ArrayList<Byte[]> chunked = Armor.chunkByteArray(chunkyBoi, chunkSize);
         chunked.add(new Byte[]{});
         return chunked;
     }
 
-    public static byte[] generatePayloadHash(byte[] headerHash, byte[] payloadNonce, boolean finalFlag, byte[] payloadSecretBox, int majorVersion)
+    public byte[] generatePayloadHash(byte[] headerHash, byte[] payloadNonce, boolean finalFlag, byte[] payloadSecretBox, int majorVersion)
     {
         byte[] finalFlagByte;
         if (majorVersion == 2)
@@ -74,7 +72,7 @@ public class Encrypt
 
     //Mode 0 = encryption, mode 1 = decryption.
     //This is slightly confusing, but it prevents a LOT of code reuse.
-    public static byte[] generateMACKey(byte[] key1, byte[] key2, byte[] key3, byte[] headerHash, long recipientIndex, int majorVersion, int mode) throws SaltpackException
+    public byte[] generateMACKey(byte[] key1, byte[] key2, byte[] key3, byte[] headerHash, long recipientIndex, int majorVersion, int mode) throws SaltpackException
     {
         if (mode != 0 && mode != 1)
         {
@@ -106,7 +104,7 @@ public class Encrypt
 
             return macKey;
         }
-        else if (majorVersion == 2) //TODO Needs to be tested.
+        else if (majorVersion == 2) //TODO Needs to be double checked using Go implementation.
         {
             /*
                 if mode == 0
@@ -129,14 +127,14 @@ public class Encrypt
             nonceBase[15] &= 0xfe; //Clear the least significant bit at index 15.
 
             byte[] macKeyBoxLongTermKey = new byte[Box.MACBYTES + 32];
-            sodiumInstance.cryptoBoxEasy(macKeyBoxLongTermKey, new byte[32], 32, nonceBase, key1, key2); //Encrypt 32 zero bytes
+            sodiumInstance.cryptoBoxEasy(macKeyBoxLongTermKey, new byte[32], 32, nonceBase, key1, key2); //me.jamesjulich.saltpack4j.Encrypt 32 zero bytes
 
             nonceBase[15] |= 0x01; //Set least significant bit of byte at index 15.
 
             byte[] macKeyBoxEphemeralKey = new byte[Box.MACBYTES + 32];
             sodiumInstance.cryptoBoxEasy(macKeyBoxEphemeralKey, new byte[32], 32, nonceBase,
                     (mode == 0 ) ? key1 : key3,
-                    (mode == 0) ? key3 : key2); //Encrypt 32 zero bytes again, with different keys
+                    (mode == 0) ? key3 : key2); //me.jamesjulich.saltpack4j.Encrypt 32 zero bytes again, with different keys
 
             byte[] concat = new byte[64];
             System.arraycopy(macKeyBoxLongTermKey, macKeyBoxLongTermKey.length - 32, concat, 0, 32); //Copy first 32 to indicies 0-31
@@ -156,7 +154,7 @@ public class Encrypt
         }
     }
 
-    public static void encrypt(byte[] message, byte[][] recipientList, byte[] privKey, int majorVersion, boolean senderVisible, boolean recipientsVisible, ByteArrayOutputStream out) throws IOException, SodiumException, SaltpackException
+    public void encrypt(byte[] message, byte[][] recipientList, byte[] privKey, int majorVersion, boolean senderVisible, boolean recipientsVisible, ByteArrayOutputStream out) throws IOException, SodiumException, SaltpackException
     {
         if (majorVersion != 1 && majorVersion != 2)
         {
@@ -270,7 +268,7 @@ public class Encrypt
         }
     }
 
-    public static void decrypt(byte[] cipherText, byte[] privKey, ByteArrayOutputStream out) throws IOException, SaltpackException
+    public void decrypt(byte[] cipherText, byte[] privKey, ByteArrayOutputStream out) throws IOException, SaltpackException
     {
         try
         {
@@ -419,53 +417,6 @@ public class Encrypt
         catch (MessageTypeException | MessageFormatException e)
         {
             throw new SaltpackException("Error processing saltpack message. Message either malformed or not intended for saltpack.", e);
-        }
-    }
-
-    public static void main(String[] args)
-    {
-        try
-        {
-            //For testing:
-            //Sender pub: 5C5C969C00B9E0EBBB8D14E9C8ED5165B78BAD06E8A7B9E7FA0CC6F617FDB967
-            //Sender private: 089BB77511D40AF4C307DCE4179EB041E6EA645B698C6D7C72D18D73885E1B2B
-
-            //Recip pub: 499F056E9F9A11CF18B7CA8326CEC70BB89FBEDEA399535B7B57299B2345FD4F
-            //Recip priv: 50991DBD243BF51CD46AFFA124A53FB46F4216241E246848E051D458E3AC26A1
-
-            sodiumInstance = new LazySodiumJava(new SodiumJava());
-
-            Armor a = new Armor();
-
-            byte[] pubKey = Key.fromHexString("499F056E9F9A11CF18B7CA8326CEC70BB89FBEDEA399535B7B57299B2345FD4F").getAsBytes();
-            byte[] senderPrivKey = Key.fromHexString("089BB77511D40AF4C307DCE4179EB041E6EA645B698C6D7C72D18D73885E1B2B").getAsBytes();
-            byte[] privKey = Key.fromHexString("50991DBD243BF51CD46AFFA124A53FB46F4216241E246848E051D458E3AC26A1").getAsBytes();
-            byte[] bytes = a.dearmor("BEGIN SALTPACK ENCRYPTED MESSAGE. kcJn5brvybfNjz6 D5litY0cgiExVuZ xnTvXbHueR5w5Ri 6G0Pm7Z4TgNVvDG fZJpMFbqqcutcid v87UC8zdZ1vS0Lp kRYbz0QhoodTzMy 0BZJx27bzOPFZv6 QI51rrRsNbnhSBQ UmkSc1v0V4TUYDf PPPLFjgblox5MjP Sqb3oayvcYhKVYd 2CqgpxQUbJbEmW6 zBTK6cPAHVhIZIK mENgutiU4HsUJx8 s5QW3EFQyGwXoW8 qgTRqsEDAjLdeCj MsXI3G58qKNmrt8 RvJEqjGFvYe6yEC BA8AEpSt18kdjWy ChZGzYFQz5oRZZv 1PmmdaZv1GgBZtH Tl6jJ7veLkU3vD3 iMchAgXHB4UuF. END SALTPACK ENCRYPTED MESSAGE.");
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-            //decrypt(bytes, privKey, out);
-
-            ByteArrayOutputStream encryptOut = new ByteArrayOutputStream();
-
-            encrypt("Hello world".getBytes(), new byte[][]{pubKey}, senderPrivKey, 1, true, true, encryptOut);
-            decrypt(encryptOut.toByteArray(), privKey, out);
-
-            System.out.println(new String(out.toByteArray()));
-
-            String armored = a.armor(encryptOut.toByteArray(), "ENCRYPTED MESSAGE"); //Fails because sodiumInstance null
-            System.out.println(armored);
-
-            /*
-                SecureRandom sr = new SecureRandom();
-                byte[] privBytes = new byte[32];
-                sr.nextBytes(privBytes);
-
-                byte[] pubKey = sodiumInstance.cryptoScalarMultBase(Key.fromBytes(privBytes)).getAsBytes();
-            */
-        }
-        catch (Exception e)
-        {
-            e.printStackTrace();
         }
     }
 }

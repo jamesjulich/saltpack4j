@@ -1,4 +1,4 @@
-package exception;
+package me.jamesjulich.saltpack4j.exception;
 
 public class SaltpackException extends Exception
 {
