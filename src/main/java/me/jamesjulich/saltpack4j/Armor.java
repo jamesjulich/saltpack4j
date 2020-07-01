@@ -47,7 +47,7 @@ public class Armor
 
     public byte[] dearmor(String armoredString) throws SaltpackException
     {
-        String[] parts = armoredString.split("\\.");
+        String[] parts = armoredString.trim().split("\\.");
 
         if (!framingIsValid(parts))
         {
@@ -153,9 +153,6 @@ public class Armor
 
         if (extractedBytes.length > byteArraySize)
         {
-            System.out.println("Houston, we have a problem.");
-            System.out.println("Actual length: " + extractedBytes.length + " Wanted length: " + byteArraySize);
-            System.out.println("Value of first byte: " + extractedBytes[0]);
             throw new SaltpackException("Could not convert BigInteger to byte[]: specified byte[] length too small. Got target length: " + byteArraySize + ", needed: " + extractedBytes.length);
         }
 
@@ -222,14 +219,12 @@ public class Armor
         //If the message doesnt contain two periods.
         if (parts.length != 3)
         {
-            System.out.println("here");
             return false;
         }
 
         //If the frames don't match the provided regex.
         if (!parts[0].matches("^[>\\n\\r\\t ]*BEGIN[>\\n\\r\\t ]+([a-zA-Z0-9]+[>\\n\\r\\t ]+)?SALTPACK[>\\n\\r\\t ]+(ENCRYPTED[>\\n\\r\\t ]+MESSAGE|SIGNED[>\\n\\r\\t ]+MESSAGE|DETACHED[>\\n\\r\\t ]+SIGNATURE)[>\\n\\r\\t ]*$"))
         {
-            System.out.println("nopehere");
             return false;
         }
 
@@ -237,9 +232,6 @@ public class Armor
         parts[0] = parts[0].replaceFirst("BEGIN", "END");
         if (!parts[0].equals(parts[2].trim()))
         {
-            System.out.println(parts[0]);
-            System.out.println(parts[2]);
-            System.out.println("HERE");
             return false;
         }
         return true;

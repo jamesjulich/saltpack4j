@@ -1,5 +1,6 @@
 plugins {
-    id 'java'
+    id 'application'
+    id 'com.github.johnrengelman.shadow' version '5.2.0'
 }
 
 group 'me.jamesjulich'
@@ -11,9 +12,29 @@ repositories {
 }
 
 dependencies {
+    compile group: 'org.slf4j', name: 'slf4j-api', version: '2.0.0-alpha1'
+    compile group: 'org.slf4j', name: 'slf4j-simple', version: '2.0.0-alpha1'
     testCompile group: 'junit', name: 'junit', version: '4.12'
     implementation "com.goterl.lazycode:lazysodium-java:4.2.6"
     implementation "net.java.dev.jna:jna:5.5.0"
     implementation 'org.msgpack:msgpack-core:0.8.20'
     implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.1'
 }
+
+compileJava {
+    sourceCompatibility = '1.8'
+    targetCompatibility = '1.8'
+}
+
+jar {
+    manifest {
+        attributes (
+                'Main-Class': 'me.jamesjulich.saltpack4j.Main'
+        )
+    }
+}
+
+run {
+    standardInput = System.in
+}
+mainClassName = 'me.jamesjulich.saltpack4j.Main'

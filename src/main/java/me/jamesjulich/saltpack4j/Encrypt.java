@@ -215,7 +215,10 @@ public class Encrypt
         messagePacker.packBinaryHeader(headerBytes.length);
         messagePacker.writePayload(headerBytes);
 
-        out.writeBytes(messagePacker.toByteArray());
+        for (byte b : messagePacker.toByteArray())
+        {
+            out.write(b);
+        }
         messagePacker.clear();
 
         byte[][] recipientMacKeys = new byte[recipientList.length][32];
@@ -403,7 +406,10 @@ public class Encrypt
                 byte[] decryptedPayload = new byte[encryptedPayload.length - SecretBox.MACBYTES];
                 sodiumInstance.cryptoSecretBoxOpenEasy(decryptedPayload, encryptedPayload, encryptedPayload.length, payloadNonce, payloadKey);
 
-                out.writeBytes(decryptedPayload);
+                for (byte b : decryptedPayload)
+                {
+                    out.write(b);
+                }
 
                 if (decryptedPayload.length == 0 || finalFlag)
                 {
