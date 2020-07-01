@@ -1,14 +1,8 @@
 package me.jamesjulich.saltpack4j;
 
-import com.goterl.lazycode.lazysodium.LazySodiumJava;
-import com.goterl.lazycode.lazysodium.SodiumJava;
-import com.goterl.lazycode.lazysodium.exceptions.SodiumException;
-import com.goterl.lazycode.lazysodium.utils.Key;
 import me.jamesjulich.saltpack4j.exception.SaltpackException;
 import org.apache.commons.lang3.ArrayUtils;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
