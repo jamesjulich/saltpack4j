@@ -154,9 +154,9 @@ public class Encrypt
 
     /**
      * Encrypts an array of bytes using the Saltpack secure messaging format
-     * @param message the payload to encrypt
+     * @param message the bytes to encrypt
      * @param recipientList an array of public keys encoded as byte arrays
-     * @param privKey the sender's private key
+     * @param privKey the sender's private key TODO Allow to be null for anonymous message
      * @param majorVersion the version of Saltpack to encrypt with
      * @param senderVisible true = send anonymously, false = not anonymously
      * @param recipientsVisible true = recipients can view other recipients

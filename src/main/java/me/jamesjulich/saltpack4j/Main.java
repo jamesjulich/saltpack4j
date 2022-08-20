@@ -4,8 +4,8 @@ import com.goterl.lazysodium.LazySodiumJava;
 import com.goterl.lazysodium.SodiumJava;
 import com.goterl.lazysodium.exceptions.SodiumException;
 import com.goterl.lazysodium.utils.Key;
+import me.jamesjulich.saltpack4j.example.SaltpackExample;
 import me.jamesjulich.saltpack4j.exception.SaltpackException;
-import me.jamesjulich.saltpack4j.test.SaltpackTest;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -23,7 +23,7 @@ public class Main
             "\n--------------------------\n" +
             ENCRYPT_USAGE + "\n" +
             DECRYPT_USAGE + "\n" +
-            "test - runs SaltpackTest.java example file" +
+            "example - runs the example code provided in the saltpack source code\n" +
             "help - commands list\n" +
             "The encrypt function will output an armored String, the decrypt function will accept an armored String as input.";
 
@@ -45,9 +45,9 @@ public class Main
             {
                 System.out.println(HELP_STRING);
             }
-            else if (commandParts[0].equalsIgnoreCase("test"))
+            else if (commandParts[0].equalsIgnoreCase("example"))
             {
-                SaltpackTest.main(args);
+                SaltpackExample.main(new String[0]);
             }
             else if (commandParts[0].equalsIgnoreCase("encrypt"))
             {
@@ -82,7 +82,7 @@ public class Main
                 );
                 byte[] encryptedMessage = encryptOut.toByteArray();
 
-                // Create an armored string (so that the message could be send across a plaintext chat, email, etc)
+                // Create an armored string (so that the message could be sent across a plaintext chat, email, etc)
                 String armored = saltpackInstance.getArmorHandler().armor(encryptedMessage, "ENCRYPTED MESSAGE");
                 System.out.println("Output armored string: \n" + armored + "\n\n");
             }

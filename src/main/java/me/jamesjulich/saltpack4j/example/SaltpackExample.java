@@ -1,4 +1,4 @@
-package me.jamesjulich.saltpack4j.test;
+package me.jamesjulich.saltpack4j.example;
 
 import com.goterl.lazysodium.LazySodiumJava;
 import com.goterl.lazysodium.SodiumJava;
@@ -10,7 +10,7 @@ import me.jamesjulich.saltpack4j.exception.SaltpackException;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
-public class SaltpackTest
+public class SaltpackExample
 {
     public static void main(String[] args) throws SaltpackException, IOException, SodiumException
     {
@@ -38,7 +38,7 @@ public class SaltpackTest
                 new byte[][]{pubKey}, // Array of keys to encrypt message for
                 senderPrivKey, // Sender's private key
                 2, // Which major version to encrypt for? 1 or 2
-                true, // Send anonymously? TODO Allow senderPrivateKey to be null for anonymous message
+                true, // Send anonymously?
                 true, // Are recipients anonymous or visible to everyone?
                 encryptOut // Output stream to send encrypted bytes to.
         );
