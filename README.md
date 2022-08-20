@@ -19,7 +19,7 @@ saltpack4j is not ready for production. There are 4 saltpack modes specified in 
 
 If you just want to see saltpack4j in action, you can download a release jar and run it using the command line.
 
-SaltpackTest.java in the test package contains a brief overview of how to interact with the saltpack4j API.
+SaltpackExample.java in the example package contains a brief overview of how to interact with the saltpack4j API.
 
 ## Contributing
 If you're interested in using/learning more about saltpack4j, I'd LOVE for you to contribute. This project has taught me so much: lots about encryption, how to debug applications properly, and even how to read code in a few new languages (Python and Go). If you would like to contribute, please submit a PR and contact me through my keybase account at [https://keybase.io/jamesjulich](https://keybase.io/jamesjulich) .
