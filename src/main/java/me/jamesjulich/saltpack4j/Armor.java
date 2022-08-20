@@ -16,9 +16,15 @@ public class Armor
 
     Armor(){}
 
+    /**
+     * Produces an armored String from an array of bytes
+     * @param bytes the source bytes
+     * @param messageType the message type string that appears in the beginning and end of an armored string
+     * @return
+     */
     public String armor(byte[] bytes, String messageType)
     {
-        ArrayList<Byte[]> chunks = chunkByteArray(ArrayUtils.toObject(bytes), 32);
+        ArrayList<Byte[]> chunks = SaltpackUtil.chunkArray(ArrayUtils.toObject(bytes), 32);
         String output = "";
 
         for (Byte[] chunk : chunks)
@@ -29,12 +35,12 @@ public class Armor
         String result = "";
         for (int i = 0; i < output.length(); i++)
         {
-            if (i % 15 == 0 && i != 0)
+            if (i % 15 == 0 && i != 0) // add spaces every fifteen characters
             {
                 result += " ";
             }
 
-            if (i % 3000 == 0 && i != 0)
+            if (i % 3000 == 0 && i != 0) // add a line break every 3000 characters
             {
                 result += "\n";
             }
@@ -56,10 +62,10 @@ public class Armor
 
         String armored = parts[1];
 
-        armored = armored.replaceAll("[>\\n\\r\\t ]", ""); //Strip all whitespaces.
+        armored = armored.replaceAll("[>\\n\\r\\t ]", ""); // Strip all whitespaces.
 
         Character[] characterArr = ArrayUtils.toObject(armored.toCharArray());
-        ArrayList<Character[]> chunks = chunkCharacterArray(characterArr, 43);
+        ArrayList<Character[]> chunks = SaltpackUtil.chunkArray(characterArr, 43);
 
         ArrayList<Byte> bytes = new ArrayList<>();
 
@@ -76,18 +82,20 @@ public class Armor
     public String encodeBlock(Byte[] bytes)
     {
         BigInteger bytesInt = new BigInteger(1, ArrayUtils.toPrimitive(bytes));
-        String encodedString = ""; //The string will have to be reversed to make sure characters are ordered most sig to least sig.
+        StringBuilder encodedString = new StringBuilder();
+
         int charBlockLength = minimumCharBlockSize(bytes.length);
 
         for (int i = 0; i < charBlockLength; i++)
         {
-            encodedString += letterFromNum(bytesInt.mod(SIXTY_TWO).intValue());
+            encodedString.append(letterFromNum(bytesInt.mod(SIXTY_TWO).intValue()));
             bytesInt = bytesInt.divide(SIXTY_TWO);
         }
-        return new StringBuilder(encodedString).reverse().toString();
+
+        // The String is reversed to order the characters from most significant to least significant.
+        return new StringBuilder(encodedString.toString()).reverse().toString();
     }
 
-    //TODO look into making this a method that uses primitive chars.
     public byte[] decodeBlock(Character[] chars) throws SaltpackException
     {
         BigInteger decodedInt = BigInteger.valueOf(numFromLetter(chars[0]));
@@ -113,8 +121,6 @@ public class Armor
         return alphabet.indexOf(c);
     }
 
-    //Flashback to 10th grade algebra because Java doesn't provide a method in the Math class for this :\
-    //...and I'm too lazy to look in other classes :P
     private double log(int n, int b)
     {
         return (Math.log(n) / Math.log(b));
@@ -130,26 +136,23 @@ public class Armor
         return (int) Math.round(Math.floor(log(62, 2) / 8.0 * charsLength));
     }
 
-    //Also another thing Java doesn't provide (that python does) by default.
+    /**
+     * Removes the most significant byte (the first byte) if it serves only as a positive sign byte.
+     * Adds padding to the front of the resulting array to create a byte array with the specified
+     * length.
+     * @param bi a BigInteger object
+     * @param byteArraySize the size of the byte array to fit the integer into
+     * @return a byte array containing optional padding and the byte representation of the BigInteger
+     * @throws SaltpackException if 'byteArraySize' < minimum bytes needed to represent 'bi'
+     */
     public static byte[] bigIntToByteArrayUnsigned(BigInteger bi, int byteArraySize) throws SaltpackException
     {
         byte[] extractedBytes = bi.toByteArray();
-        int skipped = 0;
-        boolean skip = true;
-        for (byte b : extractedBytes)
-        {
-            boolean signByte = b == (byte) 0x00;
-            if (skip && signByte)
-            {
-                skipped++;
-                continue;
-            }
-            else if (skip)
-            {
-                skip = false;
-            }
-        }
-        extractedBytes = Arrays.copyOfRange(extractedBytes, skipped, extractedBytes.length);
+        boolean skipFirst = extractedBytes[0] == 0;
+
+        // If skipping the first byte, drop the first byte.
+        if (skipFirst)
+            extractedBytes = Arrays.copyOfRange(extractedBytes, 1, extractedBytes.length);
 
         if (extractedBytes.length > byteArraySize)
         {
@@ -164,76 +167,23 @@ public class Armor
         return extractedBytes;
     }
 
-    //TODO Merge these functions into a single function using generics.
-
-    //Chunks a large array into a list of smaller arrays, the last array can be smaller than specified size.
-    public ArrayList<Character[]> chunkCharacterArray(Character[] chunkyBoi, int size)
-    {
-        ArrayList<Character[]> chunks = new ArrayList<Character[]>();
-        ArrayList<Character> currentChunk = new ArrayList<Character>();
-
-        for (Character t : chunkyBoi)
-        {
-            currentChunk.add(t);
-
-            if (currentChunk.size() == size)
-            {
-                chunks.add(currentChunk.toArray(new Character[currentChunk.size()]));
-                currentChunk.clear();
-            }
-        }
-
-        if (currentChunk.size() > 0)
-        {
-            chunks.add(currentChunk.toArray(new Character[currentChunk.size()]));
-        }
-        return chunks;
-    }
-
-    public static ArrayList<Byte[]> chunkByteArray(Byte[] chunkyBoi, int size)
-    {
-        ArrayList<Byte[]> chunks = new ArrayList<Byte[]>();
-        ArrayList<Byte> currentChunk = new ArrayList<Byte>();
-
-        for (Byte t : chunkyBoi)
-        {
-            currentChunk.add(t);
-
-            if (currentChunk.size() == size)
-            {
-                chunks.add(currentChunk.toArray(new Byte[currentChunk.size()]));
-                currentChunk.clear();
-            }
-        }
-
-        if (currentChunk.size() > 0)
-        {
-            chunks.add(currentChunk.toArray(new Byte[currentChunk.size()]));
-        }
-        return chunks;
-    }
-
-    //TODO In the future, this will need to be changed to support streaming.
+    // TODO In the future, this will need to be changed to support streaming.
     private boolean framingIsValid(String[] parts)
     {
-        //If the message doesnt contain two periods.
+        // If the message doesn't contain two periods.
         if (parts.length != 3)
         {
             return false;
         }
 
-        //If the frames don't match the provided regex.
+        // If the frames don't match the provided regex.
         if (!parts[0].matches("^[>\\n\\r\\t ]*BEGIN[>\\n\\r\\t ]+([a-zA-Z0-9]+[>\\n\\r\\t ]+)?SALTPACK[>\\n\\r\\t ]+(ENCRYPTED[>\\n\\r\\t ]+MESSAGE|SIGNED[>\\n\\r\\t ]+MESSAGE|DETACHED[>\\n\\r\\t ]+SIGNATURE)[>\\n\\r\\t ]*$"))
         {
             return false;
         }
 
-        //If the beginning and end don't match (except the words BEGIN and END).
+        // If the beginning and end don't match (except the words BEGIN and END).
         parts[0] = parts[0].replaceFirst("BEGIN", "END");
-        if (!parts[0].equals(parts[2].trim()))
-        {
-            return false;
-        }
-        return true;
+        return parts[0].equals(parts[2].trim());
     }
 }

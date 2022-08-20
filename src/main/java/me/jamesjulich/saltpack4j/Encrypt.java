@@ -1,10 +1,10 @@
 package me.jamesjulich.saltpack4j;
 
-import com.goterl.lazycode.lazysodium.LazySodium;
-import com.goterl.lazycode.lazysodium.exceptions.SodiumException;
-import com.goterl.lazycode.lazysodium.interfaces.Box;
-import com.goterl.lazycode.lazysodium.interfaces.SecretBox;
-import com.goterl.lazycode.lazysodium.utils.Key;
+import com.goterl.lazysodium.LazySodium;
+import com.goterl.lazysodium.exceptions.SodiumException;
+import com.goterl.lazysodium.interfaces.Box;
+import com.goterl.lazysodium.interfaces.SecretBox;
+import com.goterl.lazysodium.utils.Key;
 import me.jamesjulich.saltpack4j.exception.SaltpackException;
 import org.apache.commons.lang3.ArrayUtils;
 import org.msgpack.core.*;
@@ -29,14 +29,14 @@ public class Encrypt
 
     final static String myPubKey = "0121e188d25594c9315e78065ab9331bbc3590de83c5ae9d93e445754547b86905720a";
 
-    private LazySodium sodiumInstance;
+    private final LazySodium sodiumInstance;
 
     Encrypt(LazySodium sodiumInstance)
     {
         this.sodiumInstance = sodiumInstance;
     }
 
-    public byte[] getPayloadKeyBoxNonce(int majorVersion, long recipIndex) throws SaltpackException
+    private byte[] getPayloadKeyBoxNonce(int majorVersion, long recipIndex) throws SaltpackException
     {
         if (majorVersion == 1)
             return PAYLOAD_KEY_BOX_NONCE_V1.getBytes();
@@ -44,14 +44,14 @@ public class Encrypt
             return ArrayUtils.addAll(PAYLOAD_KEY_BOX_NONCE_V2.getBytes(), Armor.bigIntToByteArrayUnsigned(BigInteger.valueOf(recipIndex), 8));
     }
 
-    public ArrayList<Byte[]> chunksWithEmpty(Byte[] chunkyBoi, int chunkSize)
+    private ArrayList<Byte[]> chunksWithEmpty(Byte[] toChunk, int chunkSize)
     {
-        ArrayList<Byte[]> chunked = Armor.chunkByteArray(chunkyBoi, chunkSize);
+        ArrayList<Byte[]> chunked = SaltpackUtil.chunkArray(toChunk, chunkSize);
         chunked.add(new Byte[]{});
         return chunked;
     }
 
-    public byte[] generatePayloadHash(byte[] headerHash, byte[] payloadNonce, boolean finalFlag, byte[] payloadSecretBox, int majorVersion)
+    private byte[] generatePayloadHash(byte[] headerHash, byte[] payloadNonce, boolean finalFlag, byte[] payloadSecretBox, int majorVersion)
     {
         byte[] finalFlagByte;
         if (majorVersion == 2)
@@ -68,9 +68,9 @@ public class Encrypt
         return hash;
     }
 
-    //Mode 0 = encryption, mode 1 = decryption.
-    //This is slightly confusing, but it prevents a LOT of code reuse.
-    public byte[] generateMACKey(byte[] key1, byte[] key2, byte[] key3, byte[] headerHash, long recipientIndex, int majorVersion, int mode) throws SaltpackException
+    // Mode 0 = encryption, mode 1 = decryption.
+    // This is slightly convoluted, but it prevents a LOT of code reuse.
+    private byte[] generateMACKey(byte[] key1, byte[] key2, byte[] key3, byte[] headerHash, long recipientIndex, int majorVersion, int mode) throws SaltpackException
     {
         if (mode != 0 && mode != 1)
         {
@@ -92,7 +92,7 @@ public class Encrypt
              */
 
             byte[] headerHashFirstBytes = new byte[24];
-            System.arraycopy(headerHash, 0, headerHashFirstBytes, 0, 24); //Copy first 24 bytes of header hash.
+            System.arraycopy(headerHash, 0, headerHashFirstBytes, 0, 24); // Copy first 24 bytes of header hash.
 
             byte[] macKeyBox = new byte[Box.MACBYTES + 32];
             sodiumInstance.cryptoBoxEasy(macKeyBox, new byte[32], 32, headerHashFirstBytes, key1, key2);
@@ -102,7 +102,7 @@ public class Encrypt
 
             return macKey;
         }
-        else if (majorVersion == 2) //TODO Needs to be double checked using Go implementation.
+        else if (majorVersion == 2) // TODO Needs to be double checked using Go implementation.
         {
             /*
                 if mode == 0
@@ -117,32 +117,32 @@ public class Encrypt
              */
 
             byte[] headerHashFirstBytes = new byte[16];
-            System.arraycopy(headerHash, 0, headerHashFirstBytes, 0, 16); //Copy the first 16 bytes of header hash to this array.
+            System.arraycopy(headerHash, 0, headerHashFirstBytes, 0, 16); // Copy the first 16 bytes of header hash to this array.
 
             byte[] indexBytes = Armor.bigIntToByteArrayUnsigned(BigInteger.valueOf(recipientIndex), 8);
 
             byte[] nonceBase = ArrayUtils.addAll(headerHashFirstBytes, indexBytes);
-            nonceBase[15] &= 0xfe; //Clear the least significant bit at index 15.
+            nonceBase[15] &= 0xfe; // Clear the least significant bit at index 15.
 
             byte[] macKeyBoxLongTermKey = new byte[Box.MACBYTES + 32];
-            sodiumInstance.cryptoBoxEasy(macKeyBoxLongTermKey, new byte[32], 32, nonceBase, key1, key2); //me.jamesjulich.saltpack4j.Encrypt 32 zero bytes
+            sodiumInstance.cryptoBoxEasy(macKeyBoxLongTermKey, new byte[32], 32, nonceBase, key1, key2); // encrypt 32 zero bytes
 
-            nonceBase[15] |= 0x01; //Set least significant bit of byte at index 15.
+            nonceBase[15] |= 0x01; // Set least significant bit of byte at index 15.
 
             byte[] macKeyBoxEphemeralKey = new byte[Box.MACBYTES + 32];
             sodiumInstance.cryptoBoxEasy(macKeyBoxEphemeralKey, new byte[32], 32, nonceBase,
                     (mode == 0 ) ? key1 : key3,
-                    (mode == 0) ? key3 : key2); //me.jamesjulich.saltpack4j.Encrypt 32 zero bytes again, with different keys
+                    (mode == 0) ? key3 : key2); // encrypt 32 zero bytes again, with different keys
 
             byte[] concat = new byte[64];
-            System.arraycopy(macKeyBoxLongTermKey, macKeyBoxLongTermKey.length - 32, concat, 0, 32); //Copy first 32 to indicies 0-31
-            System.arraycopy(macKeyBoxEphemeralKey, macKeyBoxEphemeralKey.length - 32, concat, 32, 32); //Copy first 32 to indicies 32-63
+            System.arraycopy(macKeyBoxLongTermKey, macKeyBoxLongTermKey.length - 32, concat, 0, 32); // Copy first 32 to indicies 0-31
+            System.arraycopy(macKeyBoxEphemeralKey, macKeyBoxEphemeralKey.length - 32, concat, 32, 32); // Copy first 32 to indicies 32-63
 
             byte[] macKeyHash = new byte[64];
-            sodiumInstance.cryptoHashSha512(macKeyHash, concat, 64); //Take SHA-512 hash of the above bytes
+            sodiumInstance.cryptoHashSha512(macKeyHash, concat, 64); // Take SHA-512 hash of the above bytes
 
             byte[] macKey = new byte[32];
-            System.arraycopy(macKeyHash, 0, macKey, 0, 32); //Copy first 32 bytes of hash to macKey
+            System.arraycopy(macKeyHash, 0, macKey, 0, 32); // Copy first 32 bytes of hash to macKey
 
             return macKey;
         }
@@ -152,6 +152,16 @@ public class Encrypt
         }
     }
 
+    /**
+     * Encrypts an array of bytes using the Saltpack secure messaging format
+     * @param message the payload to encrypt
+     * @param recipientList an array of public keys encoded as byte arrays
+     * @param privKey the sender's private key
+     * @param majorVersion the version of Saltpack to encrypt with
+     * @param senderVisible true = send anonymously, false = not anonymously
+     * @param recipientsVisible true = recipients can view other recipients
+     * @param out a stream of encrypted bytes
+     */
     public void encrypt(byte[] message, byte[][] recipientList, byte[] privKey, int majorVersion, boolean senderVisible, boolean recipientsVisible, ByteArrayOutputStream out) throws IOException, SodiumException, SaltpackException
     {
         if (majorVersion != 1 && majorVersion != 2)
@@ -172,12 +182,12 @@ public class Encrypt
         byte[] senderSbox = new byte[SecretBox.MACBYTES + senderPublic.length];
         sodiumInstance.cryptoSecretBoxEasy(senderSbox, (senderVisible) ? senderPublic : ephemeralPublic, (senderVisible) ? senderPublic.length : ephemeralPublic.length, SENDER_KEY_SBOX_NONCE.getBytes(), payloadKey);
 
-        //This is the first part of the header. The next block of code writes recipients to the header.
+        // This is the first part of the header. The next block of code writes recipients to the header.
         headerPacker.packArrayHeader(6);
         headerPacker.packString("saltpack");
-        headerPacker.packArrayHeader(2); //Create an array with 2 elements.
+        headerPacker.packArrayHeader(2); // Create an array with 2 elements.
         headerPacker.packInt(majorVersion);
-        headerPacker.packInt((majorVersion != 1) ? MINOR_VERSION : 0); //This concludes the array.
+        headerPacker.packInt((majorVersion != 1) ? MINOR_VERSION : 0); // This concludes the array.
         headerPacker.packInt(MODE);
         headerPacker.packBinaryHeader(ephemeralPublic.length);
         headerPacker.writePayload(ephemeralPublic);
@@ -205,12 +215,12 @@ public class Encrypt
             headerPacker.writePayload(payloadKeyBox);
         }
 
-        //Now that header is finished being written, write to byte array for encoding again.
+        // Now that header is finished being written, write to byte array for encoding again.
         byte[] headerBytes = headerPacker.toByteArray();
         byte[] headerHash = new byte[64];
-        sodiumInstance.cryptoHashSha512(headerHash, headerBytes, headerBytes.length); //SHA512 header into headerHash
+        sodiumInstance.cryptoHashSha512(headerHash, headerBytes, headerBytes.length); // SHA512 header into headerHash
 
-        //Double-encode the header bytes to make decryption easier
+        // Double-encode the header bytes to make decryption easier
         MessageBufferPacker messagePacker = MessagePack.newDefaultBufferPacker();
         messagePacker.packBinaryHeader(headerBytes.length);
         messagePacker.writePayload(headerBytes);
@@ -235,8 +245,8 @@ public class Encrypt
             }
         }
 
-        //TODO Support streaming by continuing to chunk in a while loop until input stream is closed.
-        ArrayList<Byte[]> chunks = chunksWithEmpty(ArrayUtils.toObject(message), 1000000); //Chunk message into 1MB parts.
+        // TODO Support streaming by continuing to chunk in a while loop until input stream is closed.
+        ArrayList<Byte[]> chunks = chunksWithEmpty(ArrayUtils.toObject(message), 1000000); // Chunk message into 1MB parts.
         for (int i = 0; i < chunks.size(); i++)
         {
             Byte[] currentChunk = chunks.get(i);
@@ -245,7 +255,7 @@ public class Encrypt
             sodiumInstance.cryptoSecretBoxEasy(payloadSecretBox, ArrayUtils.toPrimitive(currentChunk), currentChunk.length, payloadNonce, payloadKey);
             byte[] payloadHash = generatePayloadHash(headerHash, payloadNonce, currentChunk.length == 0, payloadSecretBox, majorVersion);
 
-            messagePacker.packArrayHeader((majorVersion == 2) ? 3 : 2); //3 value array for V2, 2 values for V1.
+            messagePacker.packArrayHeader((majorVersion == 2) ? 3 : 2); // 3 value array for V2, 2 values for V1.
 
             if (majorVersion == 2)
             {
@@ -269,18 +279,24 @@ public class Encrypt
         }
     }
 
+    /**
+     * Decrypts bytes using the Saltpack secure messaging format
+     * @param cipherText the bytes to decrypt
+     * @param privKey the recipient's private key
+     * @param out a stream of bytes that outputs a decrypted payload
+     */
     public void decrypt(byte[] cipherText, byte[] privKey, ByteArrayOutputStream out) throws IOException, SaltpackException
     {
         try
         {
             Armor a = new Armor();
 
-            MessageUnpacker messageUnpacker = MessagePack.newDefaultUnpacker(cipherText); //missed opportunity for an unpack saltpack joke?
+            MessageUnpacker messageUnpacker = MessagePack.newDefaultUnpacker(cipherText);
 
             byte[] encodedHeader = new byte[messageUnpacker.unpackBinaryHeader()];
             messageUnpacker.readPayload(encodedHeader);
 
-            byte[] headerHash = new byte[64]; //SHA-512 hash = 512 bits = 64 bytes.
+            byte[] headerHash = new byte[64]; // SHA-512 hash = 512 bits = 64 bytes.
             sodiumInstance.cryptoHashSha512(headerHash, encodedHeader, encodedHeader.length);
 
             MessageUnpacker headerUnpacker = MessagePack.newDefaultUnpacker(encodedHeader);
@@ -298,7 +314,7 @@ public class Encrypt
                 throw new SaltpackException("Expected message format 'saltpack', got '" + messageFormat + "'. Message unintended for saltpack?");
             }
 
-            headerUnpacker.unpackArrayHeader(); //Version array
+            headerUnpacker.unpackArrayHeader(); // Version array
 
             int majorVersion = headerUnpacker.unpackInt();
             int minorVersion = headerUnpacker.unpackInt();
@@ -317,7 +333,7 @@ public class Encrypt
             byte[] ephemeralPubKey = new byte[headerUnpacker.unpackBinaryHeader()];
             headerUnpacker.readPayload(ephemeralPubKey);
 
-            //String sharedSecret = sodiumInstance.cryptoBoxBeforeNm(ephemeralPubKey, privKey);
+            // String sharedSecret = sodiumInstance.cryptoBoxBeforeNm(ephemeralPubKey, privKey);
             byte[] sharedSecret = new byte[48];
             sodiumInstance.cryptoBoxBeforeNm(sharedSecret, ephemeralPubKey, privKey);
 
@@ -331,13 +347,13 @@ public class Encrypt
             while (currentRecipNumber < recipientsNum)
             {
                 int recipEntryLength = headerUnpacker.unpackArrayHeader();
-                if (headerUnpacker.getNextFormat() == MessageFormat.NIL) //If recipients are anonymous
+                if (headerUnpacker.getNextFormat() == MessageFormat.NIL) // If recipients are anonymous
                 {
                     headerUnpacker.unpackNil();
                 }
                 else
                 {
-                    headerUnpacker.readPayload(headerUnpacker.unpackBinaryHeader());//TODO Add known recipients to saltpack message class.
+                    headerUnpacker.readPayload(headerUnpacker.unpackBinaryHeader());// TODO Add known recipients to saltpack message class.
                 }
 
                 byte[] payloadKeyBox = new byte[headerUnpacker.unpackBinaryHeader()];
@@ -350,10 +366,10 @@ public class Encrypt
                     currentRecipNumber++;
                     continue;
                 }
-                break; //If there is no error, break from the loop to signify that a match was found.
+                break; // If there is no error, break from the loop to signify that a match was found.
             }
 
-            //If we aren't able to access the payload key box.
+            // If we aren't able to access the payload key box.
             if (currentRecipNumber >= recipientsNum)
             {
                 throw new SaltpackException("Private key could not decrypt message. Are you using the wrong key?");
@@ -366,12 +382,12 @@ public class Encrypt
 
             BigInteger currentChunk = BigInteger.valueOf(0);
 
-            //And now for the fun part, actually decrypting things :P
+            // And now for the fun part, actually decrypting things :P
             while (true)
             {
                 boolean finalFlag = false;
 
-                messageUnpacker.unpackArrayHeader(); //Unpack the array header for the payload packet.
+                messageUnpacker.unpackArrayHeader(); // Unpack the array header for the payload packet.
 
                 if (majorVersion == 2)
                 {
@@ -387,7 +403,7 @@ public class Encrypt
                 for (int i = 0; i < recipientsNum; i++)
                 {
                     messageUnpacker.unpackBinaryHeader();
-                    messageUnpacker.readPayload(authenticators[i]); //TODO Optimize to skip all remaining authenticators before/after ours is read.
+                    messageUnpacker.readPayload(authenticators[i]); // TODO Optimize to skip all remaining authenticators before/after ours is read.
                 }
 
                 byte[] encryptedPayload = new byte[messageUnpacker.unpackBinaryHeader()];

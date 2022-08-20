@@ -1,6 +1,6 @@
 package me.jamesjulich.saltpack4j;
 
-import com.goterl.lazycode.lazysodium.LazySodium;
+import com.goterl.lazysodium.LazySodium;
 
 public class SaltPacker
 {

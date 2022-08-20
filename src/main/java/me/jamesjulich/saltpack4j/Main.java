@@ -1,9 +1,9 @@
 package me.jamesjulich.saltpack4j;
 
-import com.goterl.lazycode.lazysodium.LazySodiumJava;
-import com.goterl.lazycode.lazysodium.SodiumJava;
-import com.goterl.lazycode.lazysodium.exceptions.SodiumException;
-import com.goterl.lazycode.lazysodium.utils.Key;
+import com.goterl.lazysodium.LazySodiumJava;
+import com.goterl.lazysodium.SodiumJava;
+import com.goterl.lazysodium.exceptions.SodiumException;
+import com.goterl.lazysodium.utils.Key;
 import me.jamesjulich.saltpack4j.exception.SaltpackException;
 import me.jamesjulich.saltpack4j.test.SaltpackTest;
 
@@ -69,20 +69,20 @@ public class Main
                     toEncrypt += inputScanner.nextLine();
                 }
 
-                //Encrypt input and send output to 'encryptOut'
+                // Encrypt input and send output to 'encryptOut'
                 ByteArrayOutputStream encryptOut = new ByteArrayOutputStream();
                 saltpackInstance.getEncryptionHandler().encrypt(
-                        toEncrypt.getBytes(), //Bytes to encrypt
-                        new byte[][]{pubKey}, //Array of keys to encrypt message for
-                        senderPrivKey, //Sender's private key
-                        2, //Which major version to encrypt for? 1 or 2
-                        true, //Send anonymously? TODO Allow senderPrivateKey to be null for anonymous message
-                        true, //Are recipients anonymous or visible to everyone?
-                        encryptOut //Output stream to send encrypted bytes to.
+                        toEncrypt.getBytes(), // Bytes to encrypt
+                        new byte[][]{pubKey}, // Array of keys to encrypt message for
+                        senderPrivKey, // Sender's private key
+                        2, // Which major version to encrypt for? 1 or 2
+                        true, // Send anonymously? TODO Allow senderPrivateKey to be null for anonymous message
+                        true, // Are recipients anonymous or visible to everyone?
+                        encryptOut // Output stream to send encrypted bytes to.
                 );
                 byte[] encryptedMessage = encryptOut.toByteArray();
 
-                //Create an armored string (so that the message could be send across a plaintext chat, email, etc)
+                // Create an armored string (so that the message could be send across a plaintext chat, email, etc)
                 String armored = saltpackInstance.getArmorHandler().armor(encryptedMessage, "ENCRYPTED MESSAGE");
                 System.out.println("Output armored string: \n" + armored + "\n\n");
             }
@@ -104,10 +104,10 @@ public class Main
                 }
                 inputScanner.close();
 
-                //Dearmor the string
+                // Dearmor the string
                 byte[] dearmoredBytes = saltpackInstance.getArmorHandler().dearmor(armored);
 
-                //Decrypt the bytes.
+                // Decrypt the bytes.
                 ByteArrayOutputStream decryptOut = new ByteArrayOutputStream();
                 saltpackInstance.getEncryptionHandler().decrypt(
                         dearmoredBytes,
@@ -116,7 +116,7 @@ public class Main
                 );
                 byte[] decryptedBytes = decryptOut.toByteArray();
 
-                //Print decrypted message.
+                // Print decrypted message.
                 String decryptedMessage = new String(decryptedBytes);
                 System.out.println("Decrypted message: " + decryptedMessage);
             }
